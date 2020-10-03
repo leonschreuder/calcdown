@@ -20,10 +20,12 @@ printHelp() {
   lines till the `== n ==` line. It then updates the number on that line
   with the correct sum. Example:
 
+  ```
   =+
   3 ; Fist number to add
   2.0  some other number
   == 4 ==
+  ```
 
 
   ## Inline syntax
@@ -32,7 +34,9 @@ printHelp() {
   inside the curly braces and writes the result after the double equals
   sign. Example:
 
+  ```
   { (1 + 1) * 2 }== 4.00
+  ```
 
   ## Variables
 
