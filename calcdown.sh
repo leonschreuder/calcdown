@@ -1,6 +1,7 @@
 #!/usr/local/bin/bash
 
 isNumberMatcher='^[+-]?[0-9]+([.][0-9]+)?'
+isVarMatcher='^\$([a-zA-Z0-9_-]+)'
 typeset -A sumVars
 
 printHelp() {
@@ -80,8 +81,15 @@ handleMultilineCalc() {
 }
 
 handleLineFromMultilineCalc() {
-  [[ "$line" =~ $isNumberMatcher ]] || return # Skip if doesn't start with number
-  numberOnLine=$BASH_REMATCH
+  if [[ "$line" =~ $isNumberMatcher ]]; then
+    numberOnLine=$BASH_REMATCH
+
+  elif [[ "$line" =~ $isVarMatcher ]]; then
+    varName=${BASH_REMATCH[1]}
+    numberOnLine=${sumVars[$varName]}
+  else
+    return # no valid syntax. Just skip.
+  fi
 
   if [[ "$total" == "" ]]; then
     total=$numberOnLine
@@ -104,10 +112,11 @@ handleSumTotalLine() {
 
 handleInlineCalc() {
   # eg: {1+1}==
-  if [[ "$line" =~ {(.*)}== ]]; then
+  if [[ "$line" =~ {(.*)}==(\[(.+)\])? ]]; then
     calculation="$(resolveVars "${BASH_REMATCH[1]}")"
     result="$(bc -l <<< "$calculation")"
     result="$(printf %.2f "$result")"
+    [[ "${BASH_REMATCH[3]}" != "" ]] && sumVars[${BASH_REMATCH[3]}]=$result
     sed -i '' "${currentLineNumber}s/\({.*}==\).*/\1 $result/" $file
   fi
 }
