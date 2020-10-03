@@ -1,9 +1,24 @@
 #!/usr/local/bin/bash
 
-isNumberMatcher='^[+-]?[0-9]+([.][0-9]+)?$'
+isNumberMatcher='^[+-]?[0-9]+([.][0-9]+)?'
 typeset -A sumVars
 
+printHelp() {
+  echo '
+  calcmark - For calculations in markdown.
+
+  Simple script to run calculations in markdown files. Example:
+
+  =+
+  3 ; Fist number to add
+  1 ; Some other number
+  == 4 ==
+
+  '
+}
+
 main() {
+  [[ "$1" == "-h" ]] && printHelp && exit
   file=$1
 
   currentLineNumber=0
@@ -20,12 +35,14 @@ main() {
 handleMultilineCalc() {
   # if a line starts with =+ or =- use the repective + or - to calculate the following lines
   if [[ "$operator" == "" ]]; then
-    if [[ "$line" == "="* ]]; then
-      operator="${line#=}"
+    if [[ "$line" =~ ^=[+-/\*] ]]; then
+      operator="${line:1:1}"
     fi
   else
     if [[ "$line" == "=="* ]]; then
       handleSumTotalLine
+      unset operator
+      unset total
     else
       handleLineFromMultilineCalc
     fi
@@ -33,9 +50,8 @@ handleMultilineCalc() {
 }
 
 handleLineFromMultilineCalc() {
-  numberOnLine=${line%%;*}
-  numberOnLine=${numberOnLine// /} # remove spaces
-  [[ "$numberOnLine" =~ $isNumberMatcher ]] || return # only handle if it is actually a number
+  [[ "$line" =~ $isNumberMatcher ]] || return # Skip if doesn't start with number
+  numberOnLine=$BASH_REMATCH
 
   if [[ "$total" == "" ]]; then
     total=$numberOnLine
@@ -54,24 +70,27 @@ handleSumTotalLine() {
   else
     sed -i '' "${currentLineNumber}s/.*/== $roundedTotal ==/" $file
   fi
-  unset operator
-  unset total
 }
 
 handleInlineCalc() {
-  # if line matches ((1+1))==
-  if [[ "$line" =~ \(\((.*)\)\)== ]]; then
-    # put the the containing string through bc and add it to the end of the line
-    formula=${BASH_REMATCH[1]}
-    if [[ "$formula" =~  \[(.*)\] ]];then
-      echo ${BASH_REMATCH[1]}
-      formula="$( echo "$formula" | sed "s/\[.*\]/${}/" )"
-
-    fi
-    result="$(bc -l <<< "$formula")"
+  # eg: {1+1}==
+  if [[ "$line" =~ {(.*)}== ]]; then
+    calculation="$(resolveVars "${BASH_REMATCH[1]}")"
+    result="$(bc -l <<< "$calculation")"
     result="$(printf %.2f "$result")"
-    sed -i '' "${currentLineNumber}s/\(((.*))==\).*/\1 $result/" $file
+    sed -i '' "${currentLineNumber}s/\({.*}==\).*/\1 $result/" $file
   fi
+}
+
+# replace the variables in a string with the values: '$t1 + $t2' to '1.00 + 2.00'
+resolveVars() {
+  string="$1"
+  while [[ "$string" =~  \$([a-zA-Z0-9_]*) ]];do
+    varName=${BASH_REMATCH[1]}
+    varValue="${sumVars[$varName]}"
+    string="${string//\$$varName/$varValue}"
+  done
+  echo "$string"
 }
 
 if [[ "$0" == "$BASH_SOURCE" ]]; then
